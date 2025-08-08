@@ -36,7 +36,12 @@ class MCTSSearcher:
     def search_one_iteration(self, root_node, mdp_env, reward_calculator, X_data, y_data):
         #执行一次完整的MCTS迭代
         #四个阶段：Selection, Expansion, Rollout, Backpropagation
+        import time
+
+
         # 阶段1：选择（Selection）
+        start = time.time()
+        logger.debug("Starting selection phase...")
         path = []
         current = root_node
 
@@ -49,11 +54,14 @@ class MCTSSearcher:
 
             # 如果当前序列合法，更新边的中间奖励R(s,a)
             if RPNValidator.is_valid_partial_expression(current.state.token_sequence):
+                logger.debug(f"Calculating intermediate reward for path length {len(path)}...")
+                reward_start = time.time()
                 intermediate_reward = reward_calculator.calculate_intermediate_reward(
                     current.state, X_data, y_data
                 )
+                logger.debug(f"Intermediate reward calculation took {time.time() - reward_start:.2f}s")
                 current.update_intermediate_reward(intermediate_reward)
-
+        logger.debug(f"Selection phase took {time.time() - start:.2f}s")
         # 阶段2：扩展（Expansion）
         leaf_value = 0
         if not current.is_terminal() and current.N >= 0:
@@ -192,7 +200,7 @@ class MCTSSearcher:
         if not path:
             return
 
-        # 收集路径上的奖励
+            # 收集路径上的奖励
         rewards = []
         for i, node in enumerate(path):
             if i > 0:  # 跳过根节点

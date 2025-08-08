@@ -4,19 +4,17 @@ import pandas as pd
 from scipy.stats import spearmanr, pearsonr
 
 
-def calculate_ic(predictions, targets, method='spearman'):
+def calculate_ic(predictions, targets, method='pearman'):
     """
     计算信息系数(IC)
-
     Args:
         predictions: 预测值
         targets: 真实值
-        method: 'spearman' 或 'pearson'
-
     Returns:
         IC值
     """
-    # 处理数据
+
+    # 处理输入
     if hasattr(predictions, 'values'):
         predictions = predictions.values
     if hasattr(targets, 'values'):
@@ -35,11 +33,11 @@ def calculate_ic(predictions, targets, method='spearman'):
     if valid_mask.sum() < 2:
         return 0.0
 
-    # 计算相关系数
-    if method == 'spearman':
-        corr, _ = spearmanr(predictions[valid_mask], targets[valid_mask])
-    else:
+    # 计算Pearson相关（论文使用）
+    if method == 'pearson':
         corr, _ = pearsonr(predictions[valid_mask], targets[valid_mask])
+    else:
+        corr, _ = spearmanr(predictions[valid_mask], targets[valid_mask])
 
     return corr if not np.isnan(corr) else 0.0
 

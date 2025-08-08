@@ -19,7 +19,6 @@ class RewardCalculator:
     def __init__(self, alpha_pool, lambda_param=0.1):
         self.alpha_pool = alpha_pool  # 外部维护的alpha池
         self.lambda_param = lambda_param  # 论文指定λ=0.1
-        self.pool_size = 100  # 论文指定K=100
         self.linear_model = None
         self.formula_evaluator = FormulaEvaluator()
 
@@ -35,9 +34,8 @@ class RewardCalculator:
             return -0.1
 
         try:
-
-            # 评估当前部分公式
-            alpha_values = self.formula_evaluator(state, X_data)
+            # 修复：使用正确的评估方法
+            alpha_values = self.formula_evaluator.evaluate_state(state, X_data)
 
             if alpha_values is None:
                 return -0.1
@@ -67,7 +65,6 @@ class RewardCalculator:
             else:
                 reward = ic
 
-            logger.debug(f"Intermediate: IC={ic:.4f}, reward={reward:.4f}")
             return reward
 
         except Exception as e:

@@ -86,7 +86,7 @@ def main(args):
         logger.info("=== Using Legacy String-based System ===")
 
     # 设置GPU设备
-    if torch.cuda.is_available() and not args.cpu:
+    if torch.cuda.is_available():
         device = torch.device(f"cuda:{args.gpu_id}")
         logger.info(f"Using GPU: {torch.cuda.get_device_name(device)}")
         logger.info(f"GPU Memory: {torch.cuda.get_device_properties(device).total_memory / 1024 ** 3:.2f} GB")

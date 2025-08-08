@@ -4,8 +4,8 @@ import pandas as pd
 from scipy.stats import rankdata
 from scipy import stats
 import logging
-from .token_system import TokenType, TOKEN_DEFINITIONS
-from .operators import Operators
+from core.token_system import TokenType, TOKEN_DEFINITIONS
+from core.operators import Operators
 
 logger = logging.getLogger(__name__)
 

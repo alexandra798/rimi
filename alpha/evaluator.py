@@ -6,7 +6,7 @@ import re
 from functools import lru_cache
 from typing import Union, Dict, Optional
 
-from ..core import RPNEvaluator, RPNValidator, TOKEN_DEFINITIONS, Operators
+from core import RPNEvaluator, RPNValidator, TOKEN_DEFINITIONS, Operators
 
 logger = logging.getLogger(__name__)
 
@@ -265,25 +265,15 @@ class FormulaEvaluator:
             results[formula] = self.evaluate(formula, data)
 
         return results
+
     def evaluate_state(self, state, X_data):
-        """评估状态对应的公式值 - 修复版"""
+        """评估状态对应的公式值 - 统一接口"""
         try:
-            # 将数据转换为字典格式
-            if hasattr(X_data, 'to_dict'):
-                data_dict = X_data.to_dict('series')
-            else:
-                data_dict = X_data
+            # 构建RPN字符串
+            rpn_string = ' '.join([t.name for t in state.token_sequence])
 
-            # 判断是否为部分表达式（未以END结束）
-            is_partial = (len(state.token_sequence) == 0 or
-                          state.token_sequence[-1].name != 'END')
-
-            # 使用RPN求值器评估，传递allow_partial参数
-            result = RPNEvaluator.evaluate(
-                state.token_sequence,
-                data_dict,
-                allow_partial=is_partial
-            )
+            # 使用统一的evaluate方法
+            result = self.evaluate(rpn_string, X_data, allow_partial=True)
 
             if result is not None:
                 if hasattr(result, 'values'):

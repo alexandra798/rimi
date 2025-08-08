@@ -5,8 +5,8 @@ from scipy.stats import pearsonr
 from sklearn.linear_model import LinearRegression
 import logging
 
-from ..core import TOKEN_DEFINITIONS, TOKEN_TO_INDEX, INDEX_TO_TOKEN, TOTAL_TOKENS, TokenType, RPNValidator
-from ..alpha import FormulaEvaluator
+from core import TOKEN_DEFINITIONS, TOKEN_TO_INDEX, INDEX_TO_TOKEN, TOTAL_TOKENS, TokenType, RPNValidator
+from alpha import FormulaEvaluator
 
 logger = logging.getLogger(__name__)
 

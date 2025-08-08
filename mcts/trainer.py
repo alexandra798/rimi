@@ -6,12 +6,12 @@ import os
 import torch
 
 from alpha import FormulaEvaluator
-from .reward_calculator import RewardCalculator
+from mcts.reward_calculator import RewardCalculator
 
-from .node import MCTSNode
-from .searcher import MCTSSearcher
-from .environment import AlphaMiningMDP, MDPState
-from ..core import TOKEN_DEFINITIONS, RPNEvaluator
+from mcts.node import MCTSNode
+from mcts.searcher import MCTSSearcher
+from mcts.environment import AlphaMiningMDP, MDPState
+from core import TOKEN_DEFINITIONS, RPNEvaluator
 
 from policy.network import PolicyNetwork
 from policy.optimizer import RiskSeekingOptimizer
