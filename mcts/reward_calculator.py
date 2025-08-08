@@ -35,8 +35,9 @@ class RewardCalculator:
             return -0.1
 
         try:
+
             # 评估当前部分公式
-            alpha_values = self.evaluate_state(state, X_data)
+            alpha_values = self.formula_evaluator(state, X_data)
 
             if alpha_values is None:
                 return -0.1

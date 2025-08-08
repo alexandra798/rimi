@@ -87,3 +87,55 @@ def calculate_max_drawdown(cumulative_returns):
     max_drawdown = np.min(drawdown)
 
     return abs(max_drawdown)
+
+
+def calculate_icir(ic_series):
+    """
+    计算IC Information Ratio
+    ICIR = mean(IC) / std(IC)
+    衡量IC的稳定性
+    """
+    ic_array = np.array(ic_series)
+    ic_array = ic_array[~np.isnan(ic_array)]  # 移除NaN
+
+    if len(ic_array) < 2:
+        return 0.0
+
+    mean_ic = np.mean(ic_array)
+    std_ic = np.std(ic_array)
+
+    if std_ic == 0:
+        return 0.0 if mean_ic == 0 else np.inf
+
+    return mean_ic / std_ic
+
+
+def calculate_rank_ic(predictions, targets):
+    """
+    计算Rank IC（基于排序的相关系数）
+    更robust，对异常值不敏感
+    """
+    from scipy.stats import rankdata
+
+    # 转换为数组
+    if hasattr(predictions, 'values'):
+        predictions = predictions.values
+    if hasattr(targets, 'values'):
+        targets = targets.values
+
+    predictions = np.array(predictions).flatten()
+    targets = np.array(targets).flatten()
+
+    # 移除NaN
+    valid_mask = ~(np.isnan(predictions) | np.isnan(targets))
+    if valid_mask.sum() < 2:
+        return 0.0
+
+    # 排序
+    pred_ranks = rankdata(predictions[valid_mask])
+    target_ranks = rankdata(targets[valid_mask])
+
+    # 计算相关系数
+    corr, _ = pearsonr(pred_ranks, target_ranks)
+
+    return corr if not np.isnan(corr) else 0.0

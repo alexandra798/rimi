@@ -1,128 +1,119 @@
-"""Alpha池管理模块"""
+# alpha/pool.py 完整重写
 import numpy as np
+from sklearn.linear_model import LinearRegression, SGDRegressor
 import logging
-from scipy.stats import spearmanr
-
-logger = logging.getLogger(__name__)
 
 
 class AlphaPool:
-    """Alpha池管理类"""
+    """论文Algorithm 1的完整实现"""
 
-    def __init__(self, pool_size=100, lambda_param=0.5):
-        self.pool_size = pool_size
-        self.lambda_param = lambda_param
-        self.alpha_pool = []
-        self.ic_cache = {}
-        self.mutic_cache = {}
+    def __init__(self, pool_size=100, lambda_param=0.1, learning_rate=0.01):
+        self.pool_size = pool_size  # K
+        self.lambda_param = lambda_param  # λ
+        self.learning_rate = learning_rate
 
-    def add_to_pool(self, alpha):
+        self.alphas = []  # 存储 {formula, values, weight}
+        self.model = None  # 线性组合模型
+
+    def maintain_pool(self, new_alpha, X_data, y_data):
         """
-        添加alpha公式到池中
-        如果池大小超过限制，删除最弱的alpha
+        Algorithm 1: 维护alpha池
+        输入：当前alpha集合F，新alpha f_new，组合模型c(·|F,ω)
+        输出：最优alpha集合F*和权重ω*
         """
-        self.alpha_pool.append(alpha)
+        # Step 1: F ← F ∪ f_new
+        self.alphas.append(new_alpha)
 
-        if len(self.alpha_pool) > self.pool_size:
-            # 按调整后的奖励排序
-            self.alpha_pool.sort(
-                key=lambda x: x['score'] - self.lambda_param * self._calculate_mutual_ic(x),
-                reverse=True
-            )
-            removed_alpha = self.alpha_pool.pop(-1)
-            logger.info(f"Alpha removed from pool: {removed_alpha['formula']}")
+        # Step 2-4: 梯度下降优化权重
+        self._optimize_weights_gradient_descent(X_data, y_data)
 
-    def _calculate_mutual_ic(self, alpha):
-        """计算alpha与池中其他alpha的平均相互IC"""
-        if len(self.alpha_pool) <= 1:
-            return 0
+        # Step 5-6: 如果超过池大小，移除权重最小的alpha
+        if len(self.alphas) > self.pool_size:
+            # 找到绝对权重最小的alpha
+            min_weight_idx = np.argmin([abs(a.get('weight', 0)) for a in self.alphas])
+            removed_alpha = self.alphas.pop(min_weight_idx)
+            logging.info(f"Removed alpha with min weight: {removed_alpha['formula'][:50]}...")
 
-        mutic_sum = 0
-        count = 0
-        for other_alpha in self.alpha_pool:
-            if other_alpha['formula'] != alpha['formula']:
-                pair_key = tuple(sorted([alpha['formula'], other_alpha['formula']]))
-                if pair_key in self.mutic_cache:
-                    mutic_sum += self.mutic_cache[pair_key]
-                    count += 1
+            # 重新优化权重
+            self._optimize_weights_gradient_descent(X_data, y_data)
 
-        return mutic_sum / max(count, 1)
+        return self.alphas
 
-    def cache_ic(self, formula, ic_value):
-        """缓存IC值"""
-        self.ic_cache[formula] = ic_value
+    def _optimize_weights_gradient_descent(self, X_data, y_data, max_iters=100):
+        """使用梯度下降优化权重（论文核心）"""
+        if len(self.alphas) == 0:
+            return
 
-    def cache_mutic(self, formula1, formula2, mutic_value):
-        """缓存相互IC值"""
-        self.mutic_cache[tuple(sorted([formula1, formula2]))] = mutic_value
+        # 构建特征矩阵
+        feature_matrix = []
+        for alpha in self.alphas:
+            if 'values' in alpha:
+                values = alpha['values']
+                if hasattr(values, 'values'):
+                    values = values.values
+                feature_matrix.append(values.flatten())
 
-    def update_pool(self, X_train, y_train, evaluate_formula_func):
-        """
-        动态更新alpha池
-        """
-        for alpha in self.alpha_pool:
-            formula = alpha['formula']
-            if formula in self.ic_cache:
-                ic = self.ic_cache[formula]
-            else:
-                # 重新计算IC
-                feature = evaluate_formula_func(formula, X_train)
-                # 确保数据对齐后再使用.values
-                common_index = feature.index.intersection(y_train.index)
-                if len(common_index) > 0:
-                    feature_aligned = feature.loc[common_index]
-                    y_train_aligned = y_train.loc[common_index]
-                    # 移除NaN值
-                    valid_mask = ~(feature_aligned.isna() | y_train_aligned.isna())
-                    if valid_mask.sum() > 1:
-                        ic, _ = spearmanr(
-                            feature_aligned[valid_mask].values, 
-                            y_train_aligned[valid_mask].values
-                        )
-                    else:
-                        ic = 0.0
+        if not feature_matrix:
+            return
+
+        X = np.column_stack(feature_matrix)
+        y = y_data.values if hasattr(y_data, 'values') else y_data
+
+        # 确保维度匹配
+        min_len = min(len(X), len(y))
+        X = X[:min_len]
+        y = y[:min_len]
+
+        # 移除NaN
+        valid_mask = ~(np.any(np.isnan(X), axis=1) | np.isnan(y))
+        if valid_mask.sum() < 10:
+            return
+
+        X_clean = X[valid_mask]
+        y_clean = y[valid_mask]
+
+        # 初始化权重
+        weights = np.array([a.get('weight', 1.0 / len(self.alphas)) for a in self.alphas])
+
+        # 梯度下降
+        for iteration in range(max_iters):
+            # 前向传播：计算预测值
+            predictions = X_clean @ weights
+
+            # 计算MSE损失
+            error = predictions - y_clean
+            loss = np.mean(error ** 2)
+
+            # 反向传播：计算梯度
+            gradient = 2.0 * (X_clean.T @ error) / len(y_clean)
+
+            # 更新权重
+            weights -= self.learning_rate * gradient
+
+            # 早停条件
+            if np.linalg.norm(gradient) < 1e-6:
+                break
+
+        # 更新alpha权重
+        for i, alpha in enumerate(self.alphas):
+            alpha['weight'] = weights[i]
+
+        logging.debug(f"Optimized weights after {iteration + 1} iterations, loss={loss:.6f}")
+
+    def get_composite_alpha_value(self, X_data):
+        """计算合成alpha值"""
+        if len(self.alphas) == 0:
+            return None
+
+        weighted_sum = None
+        for alpha in self.alphas:
+            if 'values' in alpha and 'weight' in alpha:
+                values = alpha['values']
+                weight = alpha['weight']
+
+                if weighted_sum is None:
+                    weighted_sum = weight * values
                 else:
-                    ic = 0.0
-                self.cache_ic(formula, ic)
+                    weighted_sum += weight * values
 
-            # 计算与其他alpha的相互IC
-            mutic_sum = 0
-            for other_alpha in self.alpha_pool:
-                if other_alpha['formula'] != formula:
-                    pair_key = tuple(sorted([formula, other_alpha['formula']]))
-                    if pair_key in self.mutic_cache:
-                        mutic = self.mutic_cache[pair_key]
-                    else:
-                        other_feature = evaluate_formula_func(other_alpha['formula'], X_train)
-                        common_index = feature.index.intersection(other_feature.index)
-                        if len(common_index) > 0:
-                            feature_common = feature.loc[common_index]
-                            other_feature_common = other_feature.loc[common_index]
-                            # 移除NaN值
-                            valid_mask = ~(feature_common.isna() | other_feature_common.isna())
-                            if valid_mask.sum() > 1:
-                                mutic, _ = spearmanr(
-                                    feature_common[valid_mask].values,
-                                    other_feature_common[valid_mask].values
-                                )
-                            else:
-                                mutic = 0.0
-                        else:
-                            mutic = 0.0
-                        self.cache_mutic(formula, other_alpha['formula'], mutic)
-                    mutic_sum += mutic
-
-            # 调整alpha的IC
-            adjusted_ic = ic - (mutic_sum / len(self.alpha_pool))
-            alpha['adjusted_ic'] = adjusted_ic
-
-        # 按调整后的IC排序并修剪
-        self.alpha_pool.sort(key=lambda x: x['adjusted_ic'], reverse=True)
-
-        while len(self.alpha_pool) > self.pool_size:
-            removed_alpha = self.alpha_pool.pop(-1)
-            logger.info(f"Removed underperforming alpha: {removed_alpha['formula']}")
-
-    def get_top_formulas(self, n=5):
-        """获取前n个公式"""
-        return [alpha['formula'] for alpha in self.alpha_pool[:n]]
+        return weighted_sum

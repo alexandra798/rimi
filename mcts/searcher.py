@@ -12,10 +12,26 @@ logger = logging.getLogger(__name__)
 class MCTSSearcher:
     """MCTS搜索器 - 实现PUCT选择和树搜索"""
 
-    def __init__(self, policy_network=None, device=None):
+    def __init__(self, policy_network=None, device=None,
+                 initial_c_puct=1.414, c_puct_decay=0.995, min_c_puct=0.5):
         self.policy_network = policy_network
-        self.device = device if device else torch.device('cpu')
+        self.device = device
         self.gamma = 1.0
+
+        # 探索退火参数
+        self.initial_c_puct = initial_c_puct
+        self.current_c_puct = initial_c_puct
+        self.c_puct_decay = c_puct_decay
+        self.min_c_puct = min_c_puct
+        self.iteration_count = 0
+
+    def update_exploration_rate(self):
+        """更新探索率（退火）"""
+        self.current_c_puct = max(
+            self.min_c_puct,
+            self.initial_c_puct * (self.c_puct_decay ** self.iteration_count)
+        )
+        self.iteration_count += 1
 
     def search_one_iteration(self, root_node, mdp_env, reward_calculator, X_data, y_data):
         #执行一次完整的MCTS迭代
@@ -26,7 +42,7 @@ class MCTSSearcher:
 
         # 使用PUCT选择直到叶节点
         while current.is_expanded() and not current.is_terminal():
-            current = current.get_best_child()
+            current = current.get_best_child(c_puct=self.current_c_puct)
             if current is None:
                 break
             path.append(current)
@@ -69,6 +85,8 @@ class MCTSSearcher:
 
         # 构建轨迹用于策略网络训练
         trajectory = self.extract_trajectory(path)
+
+        self.update_exploration_rate()
 
         return trajectory
 
@@ -168,31 +186,37 @@ class MCTSSearcher:
 
     def backpropagate(self, path, leaf_value, reward_calculator, X_data, y_data):
         """
-        向上回传价值,使用bootstrap方法回传
-        G_k = Σ γ^i * r_{k+1+i} + v_l
+        正确的Bootstrap回传实现
+        G_k = Σ_{i=0}^{l-1-k} γ^i * r_{k+1+i} + γ^{l-k} * v_l
         """
-
-
         if not path:
             return
 
+        # 收集路径上的奖励
         rewards = []
-        for node in path:
-            if node.parent:
-                rewards.append(node.R)  # 使用存储的中间奖励
-            else:
-                rewards.append(0)
+        for i, node in enumerate(path):
+            if i > 0:  # 跳过根节点
+                # 使用节点存储的中间奖励
+                rewards.append(node.R)
 
-        # 计算每个节点的累积奖励G_k
+        # l是最后一个节点的索引
         l = len(path) - 1
-        for k in range(l + 1):
-            # l-k步bootstrap
-            G_k = 0
-            for i in range(l - k):
-                G_k += (self.gamma ** i) * rewards[k + i] if k + i < len(rewards) else 0
-            G_k += (self.gamma ** (l - k)) * leaf_value
 
-            # 更新节点（论文公式）
+        # 对路径上的每个节点进行更新
+        for k in range(len(path)):
+            # 计算G_k：k位置的累积回报
+            G_k = 0
+
+            # 累加从k到l-1的折扣奖励
+            for i in range(min(l - k, len(rewards) - k)):
+                if k + i < len(rewards):
+                    G_k += (self.gamma ** i) * rewards[k + i]
+
+            # 加上叶节点的折扣值
+            if l >= k:
+                G_k += (self.gamma ** (l - k)) * leaf_value
+
+            # 更新节点的Q值
             path[k].update(G_k)
 
     def extract_trajectory(self, path):

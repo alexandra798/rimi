@@ -8,13 +8,11 @@ import torch
 from alpha import FormulaEvaluator
 from .reward_calculator import RewardCalculator
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from .node import MCTSNode
 from .searcher import MCTSSearcher
 from .environment import AlphaMiningMDP, MDPState
-from core import TOKEN_DEFINITIONS
-from core import RPNEvaluator
+from ..core import TOKEN_DEFINITIONS, RPNEvaluator
+
 from policy.network import PolicyNetwork
 from policy.optimizer import RiskSeekingOptimizer
 
@@ -36,7 +34,7 @@ class RiskMinerTrainer:
 
         # 初始化组件
         self.mdp_env = AlphaMiningMDP()
-        self.policy_network = AlphaMiningPolicyNetwork().to(self.device)
+        self.policy_network = PolicyNetwork().to(self.device)
         self.optimizer = RiskSeekingOptimizer(self.policy_network, device=self.device)
         self.mcts_searcher = MCTSSearcher(self.policy_network, device=self.device)
         self.alpha_pool = []

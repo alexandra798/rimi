@@ -6,7 +6,7 @@ import math
 class MCTSNode:
     """蒙特卡洛树搜索节点 - 基于状态的新版本"""
 
-    def __init__(self, state=None, parent=None, action=None, prior_prob=1.0):
+    def __init__(self, state=None, parent=None, action=None, prior_prob=1.0, c_puct=1.0):
         """
         初始化MCTS节点
 
@@ -19,6 +19,7 @@ class MCTSNode:
         self.state = state
         self.parent = parent
         self.action = action  # 到达此节点的动作
+        self.c_puct = c_puct
 
         # 边信息（论文要求）
         self.N = 0  # N(s,a) - 访问次数
@@ -75,38 +76,49 @@ class MCTSNode:
         """更新中间奖励R(s,a)"""
         self.R = reward
 
-    def get_best_child(self):
+    # 重要
+    def get_best_child(self, c_puct=None):
         """
         使用论文中的PUCT公式选择最佳子节点
-        公式：a_t = argmax Q(s,a) + P(s,a) * sqrt(Σ N(s,b)) / (1 + N(s,a))
         """
         if not self.children:
             return None
 
-        # 计算总访问次数
+            # 使用传入的c_puct或节点默认值
+        c = c_puct if c_puct is not None else self.c_puct
+
+        # 计算母节点总访问次数
         total_visits = sum(child.N for child in self.children.values())
 
-        # 如果没有访问过任何子节点，返回先验概率最高的
+        # 特殊情况：首次访问，选择先验概率最高的
         if total_visits == 0:
-            return max(self.children.values(), key=lambda c: c.P)
+            return max(self.children.values(), key=lambda child: child.P)
 
+        # 计算sqrt(total_visits)用于所有子节点
         sqrt_total = math.sqrt(total_visits)
 
         best_value = -float('inf')
         best_child = None
 
         for action, child in self.children.items():
-            # PUCT公式,不使用c_puct参数
-            exploitation = child.Q  # Q(s,a)
-            exploration = child.P * sqrt_total / (1 + child.N)  # P(s,a) * sqrt(Σ N(s,b)) / (1 + N(s,a))
+            # Q值：平均奖励（exploitation）
+            q_value = child.Q
 
-            puct_value = exploitation + exploration
+            # U值：探索奖励（exploration）
+            # P(s,a) * sqrt(parent_visits) / (1 + child_visits)
+            u_value = c * child.P * sqrt_total / (1.0 + child.N)
+
+            # PUCT值
+            puct_value = q_value + u_value
 
             if puct_value > best_value:
                 best_value = puct_value
                 best_child = child
 
         return best_child
+
+
+
 
     def get_visit_distribution(self):
         """获取子节点的访问次数分布（用于最终动作选择）"""

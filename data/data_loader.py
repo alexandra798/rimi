@@ -141,3 +141,29 @@ def apply_alphas_and_return_transformed(X, alpha_formulas, evaluate_formula_func
         transformed_X[formula] = result
 
     return transformed_X
+
+
+def prepare_stock_features(raw_data):
+    """
+    准备论文要求的6个特征
+    """
+    features = pd.DataFrame()
+
+    # 基础价格特征
+    features['open'] = raw_data['open']
+    features['high'] = raw_data['high']
+    features['low'] = raw_data['low']
+    features['close'] = raw_data['close']
+    features['volume'] = raw_data['volume']
+
+    # 计算VWAP (Volume Weighted Average Price)
+    # VWAP = Σ(Price * Volume) / Σ(Volume)
+    typical_price = (raw_data['high'] + raw_data['low'] + raw_data['close']) / 3
+    features['vwap'] = (typical_price * raw_data['volume']).rolling(window=1).sum() / \
+                       raw_data['volume'].rolling(window=1).sum()
+
+    # 计算收益率目标
+    returns_5d = raw_data['close'].pct_change(5).shift(-5)  # 未来5天收益率
+    returns_10d = raw_data['close'].pct_change(10).shift(-10)  # 未来10天收益率
+
+    return features, returns_5d, returns_10d
